@@ -1,0 +1,427 @@
+{
+  "name": "Telegram Expense Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "webhookId": "telegram-expense-bot",
+        "options": {}
+      },
+      "id": "telegram-webhook",
+      "name": "Telegram Webhook",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1,
+      "position": [220, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.message.text }}",
+              "operation": "startsWith",
+              "value2": "/start"
+            }
+          ]
+        }
+      },
+      "id": "check-start-command",
+      "name": "Check Start Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.message.text }}",
+              "operation": "startsWith",
+              "value2": "/help"
+            }
+          ]
+        }
+      },
+      "id": "check-help-command",
+      "name": "Check Help Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [440, 500]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.message.text }}",
+              "operation": "startsWith",
+              "value2": "/view"
+            }
+          ]
+        }
+      },
+      "id": "check-view-command",
+      "name": "Check View Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [440, 700]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.message.text }}",
+              "operation": "regex",
+              "value2": "^\\d+(\\.\\d{2})? .+$"
+            }
+          ]
+        }
+      },
+      "id": "check-expense-format",
+      "name": "Check Expense Format",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [440, 900]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id }}",
+        "text": "🎉 Chào mừng bạn đến với Bot Quản lý Chi tiêu!\n\n📝 Cách sử dụng:\n• Gửi chi tiêu theo định dạng: [số tiền] [mô tả]\n  Ví dụ: 50000 ăn trưa\n• /help - Xem hướng dẫn\n• /view - Xem chi tiêu hôm nay\n• /summary - Tổng kết tuần/tháng\n\n💡 Bot sẽ tự động lưu chi tiêu của bạn vào Google Sheets!"
+      },
+      "id": "send-welcome-message",
+      "name": "Send Welcome Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [660, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id }}",
+        "text": "📋 Hướng dẫn sử dụng Bot Quản lý Chi tiêu:\n\n💰 Thêm chi tiêu:\n• Gửi tin nhắn theo định dạng: [số tiền] [mô tả]\n• Ví dụ: 25000 cafe sáng\n• Ví dụ: 150000 mua sắm\n\n📊 Xem thông tin:\n• /view - Chi tiêu hôm nay\n• /summary - Tổng kết\n• /categories - Chi tiêu theo danh mục\n\n⚠️ Lưu ý: Số tiền phải là số nguyên hoặc thập phân, theo sau là mô tả chi tiêu."
+      },
+      "id": "send-help-message",
+      "name": "Send Help Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [660, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Expenses",
+        "range": "A:F",
+        "options": {}
+      },
+      "id": "read-google-sheet",
+      "name": "Read Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [660, 600],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse expense text and extract amount and description\nconst text = $input.first().json.message.text;\nconst userId = $input.first().json.message.from.id;\nconst userName = $input.first().json.message.from.first_name || 'Unknown';\nconst chatId = $input.first().json.message.chat.id;\n\n// Extract amount and description using regex\nconst match = text.match(/^(\\d+(?:\\.\\d{2})?)\\s+(.+)$/);\n\nif (match) {\n  const amount = parseFloat(match[1]);\n  const description = match[2].trim();\n  const currentDate = new Date();\n  const dateStr = currentDate.toLocaleDateString('vi-VN');\n  const timeStr = currentDate.toLocaleTimeString('vi-VN');\n  \n  // Auto-categorize based on keywords\n  let category = 'Khác';\n  const desc = description.toLowerCase();\n  \n  if (desc.includes('ăn') || desc.includes('cafe') || desc.includes('uống') || desc.includes('trưa') || desc.includes('sáng') || desc.includes('tối')) {\n    category = 'Ăn uống';\n  } else if (desc.includes('xăng') || desc.includes('xe') || desc.includes('grab') || desc.includes('taxi')) {\n    category = 'Di chuyển';\n  } else if (desc.includes('mua') || desc.includes('shopping') || desc.includes('quần áo') || desc.includes('giày')) {\n    category = 'Mua sắm';\n  } else if (desc.includes('điện') || desc.includes('nước') || desc.includes('nhà') || desc.includes('tiền nhà')) {\n    category = 'Sinh hoạt';\n  } else if (desc.includes('game') || desc.includes('phim') || desc.includes('giải trí')) {\n    category = 'Giải trí';\n  }\n  \n  return [{\n    json: {\n      userId: userId,\n      userName: userName,\n      chatId: chatId,\n      amount: amount,\n      description: description,\n      category: category,\n      date: dateStr,\n      time: timeStr,\n      timestamp: currentDate.toISOString()\n    }\n  }];\n} else {\n  return [{\n    json: {\n      error: 'Invalid format',\n      chatId: chatId,\n      originalText: text\n    }\n  }];\n}"
+      },
+      "id": "parse-expense",
+      "name": "Parse Expense",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 800]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.error }}",
+              "operation": "isEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-parse-success",
+      "name": "Check Parse Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [860, 800]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetName": "Expenses",
+        "range": "A:F",
+        "options": {
+          "valueInputOption": "USER_ENTERED"
+        },
+        "values": {
+          "values": [
+            [
+              "={{ $json.date }}",
+              "={{ $json.time }}",
+              "={{ $json.amount }}",
+              "={{ $json.description }}",
+              "={{ $json.category }}",
+              "={{ $json.userName }}"
+            ]
+          ]
+        }
+      },
+      "id": "save-to-google-sheet",
+      "name": "Save to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1080, 700],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "✅ Đã lưu chi tiêu thành công!\n\n💰 Số tiền: {{ $json.amount.toLocaleString('vi-VN') }} VND\n📝 Mô tả: {{ $json.description }}\n📂 Danh mục: {{ $json.category }}\n🕒 Thời gian: {{ $json.time }}\n\n📊 Gửi /view để xem chi tiêu hôm nay"
+      },
+      "id": "send-success-message",
+      "name": "Send Success Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1300, 700],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "❌ Định dạng không đúng!\n\n📝 Vui lòng gửi theo định dạng:\n[số tiền] [mô tả]\n\nVí dụ:\n• 50000 ăn trưa\n• 25000 cafe\n• 100000 mua sắm\n\nGửi /help để xem hướng dẫn chi tiết."
+      },
+      "id": "send-error-message",
+      "name": "Send Error Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1080, 900],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter today's expenses and calculate totals\nconst input = $input.all();\nconst chatId = $('Telegram Webhook').first().json.message.chat.id;\nconst today = new Date().toLocaleDateString('vi-VN');\n\nif (input.length === 0 || !input[0].json) {\n  return [{\n    json: {\n      chatId: chatId,\n      message: '📊 Chưa có chi tiêu nào hôm nay!\\n\\n💡 Hãy thêm chi tiêu đầu tiên bằng cách gửi:\\n[số tiền] [mô tả]\\n\\nVí dụ: 50000 ăn trưa'\n    }\n  }];\n}\n\nconst expenses = input.filter(item => {\n  const itemDate = item.json[0]; // Date is in column A\n  return itemDate === today;\n});\n\nif (expenses.length === 0) {\n  return [{\n    json: {\n      chatId: chatId,\n      message: '📊 Chưa có chi tiêu nào hôm nay!\\n\\n💡 Hãy thêm chi tiêu đầu tiên bằng cách gửi:\\n[số tiền] [mô tả]\\n\\nVí dụ: 50000 ăn trưa'\n    }\n  }];\n}\n\nlet total = 0;\nlet expenseList = '📊 Chi tiêu hôm nay (' + today + '):\\n\\n';\nconst categories = {};\n\nexpenses.forEach((expense, index) => {\n  const amount = parseFloat(expense.json[2]); // Amount is in column C\n  const description = expense.json[3]; // Description is in column D\n  const category = expense.json[4]; // Category is in column E\n  const time = expense.json[1]; // Time is in column B\n  \n  total += amount;\n  expenseList += `${index + 1}. 💰 ${amount.toLocaleString('vi-VN')} VND\\n   📝 ${description}\\n   📂 ${category} • 🕒 ${time}\\n\\n`;\n  \n  if (categories[category]) {\n    categories[category] += amount;\n  } else {\n    categories[category] = amount;\n  }\n});\n\nexpenseList += `💯 Tổng cộng: ${total.toLocaleString('vi-VN')} VND\\n\\n`;\nexpenseList += '📈 Theo danh mục:\\n';\n\nfor (const [category, amount] of Object.entries(categories)) {\n  expenseList += `• ${category}: ${amount.toLocaleString('vi-VN')} VND\\n`;\n}\n\nreturn [{\n  json: {\n    chatId: chatId,\n    message: expenseList\n  }\n}];"
+      },
+      "id": "process-view-expenses",
+      "name": "Process View Expenses",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 600]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.message }}"
+      },
+      "id": "send-view-response",
+      "name": "Send View Response",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1080, 600],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram Bot Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Start Command",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Help Command",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check View Command",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check Expense Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Start Command": {
+      "main": [
+        [
+          {
+            "node": "Send Welcome Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Help Command": {
+      "main": [
+        [
+          {
+            "node": "Send Help Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check View Command": {
+      "main": [
+        [
+          {
+            "node": "Read Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Expense Format": {
+      "main": [
+        [
+          {
+            "node": "Parse Expense",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Google Sheet": {
+      "main": [
+        [
+          {
+            "node": "Process View Expenses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Expense": {
+      "main": [
+        [
+          {
+            "node": "Check Parse Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Parse Success": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Error Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Google Sheet": {
+      "main": [
+        [
+          {
+            "node": "Send Success Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process View Expenses": {
+      "main": [
+        [
+          {
+            "node": "Send View Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "telegram",
+      "name": "telegram"
+    },
+    {
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "expense-tracking",
+      "name": "expense-tracking"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
